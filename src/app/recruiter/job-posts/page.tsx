@@ -1,34 +1,31 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-interface Job {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  type: string;
-  description: string;
-  requirements: string;
-  salary: string;
-  postedAt: string;
-}
+import { jobService, Job } from '@/lib/database';
 
 export default function JobPostsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
 
   useEffect(() => {
-    // Retrieve jobs from session storage
-    const storedJobs = sessionStorage.getItem('postedJobs');
-    if (storedJobs) {
-      setJobs(JSON.parse(storedJobs));
-    }
+    loadJobs();
   }, []);
 
-  const handleDeleteJob = (jobId: string) => {
-    const updatedJobs = jobs.filter(job => job.id !== jobId);
-    setJobs(updatedJobs);
-    sessionStorage.setItem('postedJobs', JSON.stringify(updatedJobs));
+  const loadJobs = async () => {
+    try {
+      const myJobs = await jobService.getMyJobs();
+      setJobs(myJobs);
+    } catch (error) {
+      console.error('Error loading jobs:', error);
+    }
+  };
+
+  const handleDeleteJob = async (jobId: string) => {
+    try {
+      await jobService.deleteJob(jobId);
+      await loadJobs(); // Refresh the jobs list
+    } catch (error) {
+      console.error('Error deleting job:', error);
+    }
   };
 
   const handleViewApplications = (jobId: string) => {
@@ -50,7 +47,7 @@ export default function JobPostsPage() {
               No jobs posted yet.
             </p>
             <a
-              href="/recruiter/create-job"
+              href="/"
               className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Post Your First Job
@@ -88,7 +85,7 @@ export default function JobPostsPage() {
                       )}
                     </div>
                     <p className="text-sm text-zinc-500 dark:text-zinc-500 mb-4">
-                      Posted on {new Date(job.postedAt).toLocaleDateString()}
+                      Posted on {new Date(job.created_at).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="flex gap-2">

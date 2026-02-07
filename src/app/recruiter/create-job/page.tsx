@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { jobService } from '@/lib/database';
 
 interface JobFormData {
   title: string;
@@ -10,18 +11,6 @@ interface JobFormData {
   description: string;
   requirements: string;
   salary: string;
-}
-
-interface Job {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  type: string;
-  description: string;
-  requirements: string;
-  salary: string;
-  postedAt: string;
 }
 
 export default function CreateJobForm() {
@@ -35,6 +24,8 @@ export default function CreateJobForm() {
     salary: ''
   });
 
+  const [showToast, setShowToast] = useState(false);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({
       ...formData,
@@ -42,38 +33,41 @@ export default function CreateJobForm() {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Create new job object with ID and timestamp
-    const newJob: Job = {
-      id: Date.now().toString(),
-      ...formData,
-      postedAt: new Date().toISOString()
-    };
-    
-    // Get existing jobs from session storage
-    const existingJobs = sessionStorage.getItem('postedJobs');
-    const jobs = existingJobs ? JSON.parse(existingJobs) : [];
-    
-    // Add new job to array
-    jobs.push(newJob);
-    
-    // Save updated jobs to session storage
-    sessionStorage.setItem('postedJobs', JSON.stringify(jobs));
-    
-    alert('Job posted successfully!');
-    
-    // Reset form
-    setFormData({
-      title: '',
-      company: '',
-      location: '',
-      type: 'full-time',
-      description: '',
-      requirements: '',
-      salary: ''
-    });
+    try {
+      // Create new job in database
+      await jobService.createJob({
+        title: formData.title,
+        company: formData.company,
+        location: formData.location,
+        type: formData.type as 'full-time' | 'part-time' | 'contract' | 'remote',
+        description: formData.description,
+        requirements: formData.requirements,
+        salary: formData.salary
+      });
+      
+      // Show success toast
+      setShowToast(true);
+      
+      // Reset form
+      setFormData({
+        title: '',
+        company: '',
+        location: '',
+        type: 'full-time',
+        description: '',
+        requirements: '',
+        salary: ''
+      });
+      
+      // Hide toast after 3 seconds
+      setTimeout(() => setShowToast(false), 3000);
+    } catch (error) {
+      console.error('Error creating job:', error);
+      alert('Error posting job. Please try again.');
+    }
   };
 
   const handleNavigateToJobPosts = () => {
@@ -209,6 +203,13 @@ export default function CreateJobForm() {
             Post Job
           </button>
         </form>
+        
+        {/* Success Toast */}
+        {showToast && (
+          <div className="fixed bottom-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50">
+            Job posted successfully!
+          </div>
+        )}
       </div>
     </div>
   );
