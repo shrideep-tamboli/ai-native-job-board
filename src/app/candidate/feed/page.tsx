@@ -1,26 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-interface Job {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  type: string;
-  description: string;
-  requirements: string;
-  salary: string;
-  postedAt: string;
-}
-
-interface Application {
-  id: string;
-  jobId: string;
-  appliedAt: string;
-  status: string;
-  candidateMessage: string;
-}
+import { jobService, applicationService, Job, Application } from '@/lib/database';
 
 export default function CandidateFeedPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -30,57 +11,61 @@ export default function CandidateFeedPage() {
   const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
-    // Retrieve jobs from session storage
-    const storedJobs = sessionStorage.getItem('postedJobs');
-    if (storedJobs) {
-      setJobs(JSON.parse(storedJobs));
-    }
+    loadJobs();
   }, []);
 
-  const handleApplyClick = (job: Job) => {
-    // Check if already applied
-    const existingApplications = sessionStorage.getItem('jobApplications');
-    const applications = existingApplications ? JSON.parse(existingApplications) : [];
-    
-    if (applications.some((app: any) => app.jobId === job.id)) {
-      alert('You have already applied for this job!');
-      return;
+  const loadJobs = async () => {
+    try {
+      const allJobs = await jobService.getAllJobs();
+      setJobs(allJobs);
+    } catch (error) {
+      console.error('Error loading jobs:', error);
     }
-    
-    setSelectedJob(job);
-    setShowApplicationForm(true);
-    setApplicationMessage('');
   };
 
-  const handleSubmitApplication = () => {
+  const handleApplyClick = async (job: Job) => {
+    try {
+      // Check if already applied
+      const hasAlreadyApplied = await applicationService.hasApplied(job.id);
+      if (hasAlreadyApplied) {
+        alert('You have already applied for this job!');
+        return;
+      }
+      
+      setSelectedJob(job);
+      setShowApplicationForm(true);
+      setApplicationMessage('');
+    } catch (error) {
+      console.error('Error checking application status:', error);
+    }
+  };
+
+  const handleSubmitApplication = async () => {
     if (!selectedJob || !applicationMessage.trim()) {
       return;
     }
 
-    // Get existing applications from session storage
-    const existingApplications = sessionStorage.getItem('jobApplications');
-    const applications = existingApplications ? JSON.parse(existingApplications) : [];
-    
-    // Add new application
-    const newApplication: Application = {
-      id: Date.now().toString(),
-      jobId: selectedJob.id,
-      appliedAt: new Date().toISOString(),
-      status: 'pending',
-      candidateMessage: applicationMessage
-    };
-    
-    applications.push(newApplication);
-    sessionStorage.setItem('jobApplications', JSON.stringify(applications));
-    
-    // Show success toast and close form
-    setShowToast(true);
-    setShowApplicationForm(false);
-    setApplicationMessage('');
-    setSelectedJob(null);
-    
-    // Hide toast after 3 seconds
-    setTimeout(() => setShowToast(false), 3000);
+    try {
+      // Create new application
+      await applicationService.createApplication({
+        job_id: selectedJob.id,
+        candidate_message: applicationMessage,
+        status: 'pending',
+        candidate_id: '' // This will be automatically set by the service
+      });
+      
+      // Show success toast and close form
+      setShowToast(true);
+      setShowApplicationForm(false);
+      setApplicationMessage('');
+      setSelectedJob(null);
+      
+      // Hide toast after 3 seconds
+      setTimeout(() => setShowToast(false), 3000);
+    } catch (error) {
+      console.error('Error submitting application:', error);
+      alert('Error submitting application. Please try again.');
+    }
   };
 
   const handleNavigateToApplications = () => {
@@ -137,7 +122,7 @@ export default function CandidateFeedPage() {
                     )}
                   </div>
                   <p className="text-sm text-zinc-500 dark:text-zinc-500 mb-4">
-                    Posted on {new Date(job.postedAt).toLocaleDateString()}
+                    Posted on {new Date(job.created_at).toLocaleDateString()}
                   </p>
                 </div>
                 

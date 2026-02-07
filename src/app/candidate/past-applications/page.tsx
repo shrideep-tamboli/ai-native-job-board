@@ -1,49 +1,46 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-
-interface Job {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  type: string;
-  description: string;
-  requirements: string;
-  salary: string;
-  postedAt: string;
-}
-
-interface Application {
-  id: string;
-  jobId: string;
-  appliedAt: string;
-  status: string;
-}
+import { applicationService, jobService, Application, Job } from '@/lib/database';
 
 export default function PastApplicationsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
 
   useEffect(() => {
-    // Retrieve applications from session storage
-    const storedApplications = sessionStorage.getItem('jobApplications');
-    if (storedApplications) {
-      setApplications(JSON.parse(storedApplications));
-    }
-    
-    // Retrieve jobs from session storage
-    const storedJobs = sessionStorage.getItem('postedJobs');
-    if (storedJobs) {
-      setJobs(JSON.parse(storedJobs));
-    }
+    loadApplications();
   }, []);
 
-  const handleWithdrawApplication = (applicationId: string) => {
-    const updatedApplications = applications.filter(app => app.id !== applicationId);
-    setApplications(updatedApplications);
-    sessionStorage.setItem('jobApplications', JSON.stringify(updatedApplications));
-    alert('Application withdrawn successfully!');
+  const loadApplications = async () => {
+    try {
+      // Load user's applications from database
+      const userApplications = await applicationService.getMyApplications();
+      setApplications(userApplications);
+      
+      // Load job details for each application
+      const jobIds = userApplications.map(app => app.job_id);
+      const uniqueJobIds = [...new Set(jobIds)];
+      
+      const jobDetails = await Promise.all(
+        uniqueJobIds.map(jobId => jobService.getJobById(jobId))
+      );
+      
+      setJobs(jobDetails.filter(Boolean));
+    } catch (error) {
+      console.error('Error loading applications:', error);
+    }
+  };
+
+  const handleWithdrawApplication = async (applicationId: string) => {
+    try {
+      await applicationService.deleteApplication(applicationId);
+      // Refresh applications list
+      await loadApplications();
+      alert('Application withdrawn successfully!');
+    } catch (error) {
+      console.error('Error withdrawing application:', error);
+      alert('Error withdrawing application. Please try again.');
+    }
   };
 
   const getJobDetails = (jobId: string) => {
@@ -78,7 +75,7 @@ export default function PastApplicationsPage() {
         ) : (
           <div className="space-y-6">
             {applications.map((application) => {
-              const job = getJobDetails(application.jobId);
+              const job = getJobDetails(application.job_id);
               if (!job) return null;
               
               return (
@@ -109,7 +106,7 @@ export default function PastApplicationsPage() {
                       </div>
                       <div className="flex gap-4 text-sm text-zinc-500 dark:text-zinc-500 mb-4">
                         <span>
-                          <strong>Applied on:</strong> {new Date(application.appliedAt).toLocaleDateString()}
+                          <strong>Applied on:</strong> {new Date(application.applied_at).toLocaleDateString()}
                         </span>
                         <span>
                           <strong>Status:</strong> 
