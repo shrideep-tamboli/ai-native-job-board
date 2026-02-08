@@ -263,7 +263,7 @@ export class GitHubClient {
           issues.push({
             number: issue.number,
             title: issue.title,
-            body: issue.body,
+            body: issue.body ?? null,
             user: { login: issue.user?.login ?? 'Unknown' },
             state: issue.state,
             created_at: issue.created_at,
