@@ -31,7 +31,7 @@ export {
 export { GitHubClient } from './github/client';
 export { fetchRepoArtifacts, parseRepoUrl } from './github/fetcher';
 export { normalizeArtifacts } from './github/normalizer';
-export { getGitHubAuthURL, exchangeCodeForToken } from './github/oauth';
+export { getGitHubAuthURL, exchangeCodeForToken, parseReturnToFromState } from './github/oauth';
 
 // Evaluator
 export { GeminiClient } from './evaluator/gemini';

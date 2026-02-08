@@ -2,43 +2,60 @@
 
 import { useState, useEffect } from 'react';
 import { jobService, applicationService, Job, Application } from '@/lib/database';
+import ScoreCard, { type EvaluationDisplay } from '@/components/ScoreCard';
 
-// Application Card Component
-function ApplicationCard({ 
-  application, 
-  index, 
-  onUpdateStatus 
-}: { 
+function ApplicationCard({
+  application,
+  index,
+  onUpdateStatus,
+}: {
   application: Application;
   index: number;
+  job: Job;
   onUpdateStatus: (id: string, status: 'pending' | 'accepted' | 'rejected') => Promise<void>;
 }) {
+  const evaluation = application.evaluation_data as EvaluationDisplay | null | undefined;
+  const hasEvaluation = application.evaluation_data != null && application.evaluation_status === 'completed';
+
+  const statusStyle = (s: string) => {
+    if (s === 'accepted') return 'text-zinc-900 dark:text-zinc-100';
+    if (s === 'rejected') return 'text-zinc-400 dark:text-zinc-500';
+    return 'text-zinc-500 dark:text-zinc-400';
+  };
+
   return (
-    <div className="bg-white dark:bg-black border border-black/[.08] dark:border-white/[.145] rounded-lg p-4 shadow-sm">
+    <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
       <div className="flex justify-between items-start mb-3">
         <div className="flex-1">
-          <h4 className="text-md font-semibold text-black dark:text-zinc-50 mb-2">
-            Application #{index + 1}
-          </h4>
-          <div className="text-sm text-zinc-600 dark:text-zinc-400 mb-2">
-            <span>
-              <strong>Applied:</strong> {new Date(application.applied_at).toLocaleDateString()}
+          <div className="flex items-center gap-2 mb-1">
+            <h4 className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              Application #{index + 1}
+            </h4>
+            {application.overall_score != null && (
+              <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                Score: {application.overall_score}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-xs text-zinc-400 dark:text-zinc-500">
+            <span>Applied {new Date(application.applied_at).toLocaleDateString()}</span>
+            <span className={`capitalize font-medium ${statusStyle(application.status)}`}>
+              {application.status}
             </span>
           </div>
         </div>
-        
-        <div className="flex gap-1">
+        <div className="flex gap-1.5">
           {application.status === 'pending' && (
             <>
               <button
                 onClick={() => onUpdateStatus(application.id, 'accepted')}
-                className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                className="px-2.5 py-1 text-xs font-medium border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-900 hover:text-white dark:hover:bg-zinc-100 dark:hover:text-zinc-900 transition-colors"
               >
                 Accept
               </button>
               <button
                 onClick={() => onUpdateStatus(application.id, 'rejected')}
-                className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                className="px-2.5 py-1 text-xs font-medium border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-colors"
               >
                 Reject
               </button>
@@ -46,27 +63,28 @@ function ApplicationCard({
           )}
         </div>
       </div>
-      
-      <div className="space-y-3">
-        <div>
-          <h5 className="font-medium text-black dark:text-zinc-50 mb-1 text-sm">Candidate Information</h5>
-          <div className="text-xs text-zinc-600 dark:text-zinc-400 space-y-1">
-            <div>
-              <strong>Candidate ID:</strong> {application.candidate_id}
-            </div>
+
+      {application.candidate_message && (
+        <div className="mb-3">
+          <h5 className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">Message</h5>
+          <div className="px-3 py-2 bg-zinc-50 dark:bg-zinc-900 rounded-lg">
+            <p className="text-xs text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap line-clamp-3 leading-relaxed">
+              {application.candidate_message}
+            </p>
           </div>
         </div>
-        
-        {application.candidate_message && (
-          <div>
-            <h5 className="font-medium text-black dark:text-zinc-50 mb-1 text-sm">Candidate Message</h5>
-            <div className="p-2 bg-zinc-50 dark:bg-zinc-900 rounded text-xs">
-              <p className="text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">
-                {application.candidate_message}
-              </p>
-            </div>
-          </div>
-        )}
+      )}
+
+      <div className="mb-2">
+        <h5 className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">AI Evaluation</h5>
+        <ScoreCard
+          evaluation={hasEvaluation && evaluation ? evaluation : null}
+          repoUrl={application.repo_url ?? undefined}
+        />
+      </div>
+
+      <div className="text-xs text-zinc-400 dark:text-zinc-500 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+        ID: {application.candidate_id}
       </div>
     </div>
   );
@@ -75,192 +93,229 @@ function ApplicationCard({
 export default function RecruiterDashboardPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [evaluateLoading, setEvaluateLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected'>('all');
+
+  const jobId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('jobId') : null;
 
   useEffect(() => {
-    // Get job ID from URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const jobId = urlParams.get('jobId');
-    
-    if (jobId) {
-      loadJobAndApplications(jobId);
-    }
-  }, []);
+    if (jobId) loadJobAndApplications(jobId);
+  }, [jobId]);
 
-  const loadJobAndApplications = async (jobId: string) => {
+  const loadJobAndApplications = async (id: string) => {
     try {
-      console.log('Loading data for jobId:', jobId);
-      
-      // Load job from database
-      const jobData = await jobService.getJobById(jobId);
-      console.log('Job data:', jobData);
+      const jobData = await jobService.getJobById(id);
       setJob(jobData);
-      
-      // Load applications for this job
-      const applicationsData = await applicationService.getApplicationsByJobId(jobId);
-      console.log('Applications data:', applicationsData);
-      console.log('Applications count:', applicationsData?.length || 0);
+      const applicationsData = await applicationService.getApplicationsByJobId(id);
       setApplications(applicationsData || []);
     } catch (error) {
       console.error('Error loading job and applications:', error);
-      console.error('Error details:', error instanceof Error ? error.message : 'Unknown error');
     }
   };
 
   const handleUpdateApplicationStatus = async (applicationId: string, newStatus: 'pending' | 'accepted' | 'rejected') => {
     try {
       await applicationService.updateApplicationStatus(applicationId, newStatus);
-      // Refresh applications list
       if (job) {
-        const updatedApplications = await applicationService.getApplicationsByJobId(job.id);
-        setApplications(updatedApplications);
+        const updated = await applicationService.getApplicationsByJobId(job.id);
+        setApplications(updated);
       }
     } catch (error) {
       console.error('Error updating application status:', error);
     }
   };
 
-  const handleBackToJobs = () => {
-    window.location.href = '/recruiter/job-posts';
+  const handleEvaluateAll = async () => {
+    if (!job) return;
+    const toEvaluate = applications.filter(
+      (app) => app.artifact_data != null && app.evaluation_status !== 'completed'
+    );
+    if (toEvaluate.length === 0) return;
+    setEvaluateLoading(true);
+    const jobDescription = {
+      id: job.id,
+      title: job.title,
+      company: job.company,
+      description: job.description,
+      requirements: job.requirements,
+    };
+    for (const app of toEvaluate) {
+      try {
+        await applicationService.setApplicationEvaluationProcessing(app.id);
+        const res = await fetch('/api/screener/evaluate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ artifactBundle: app.artifact_data, jobDescription }),
+        });
+        const json = await res.json();
+        if (res.ok && json.data) {
+          await applicationService.updateApplicationEvaluation(
+            app.id,
+            json.data as Record<string, unknown>,
+            json.data.overallScore ?? 0
+          );
+        }
+      } catch (err) {
+        console.error('Evaluate failed for application', app.id, err);
+      }
+    }
+    const updated = await applicationService.getApplicationsByJobId(job.id);
+    setApplications(updated);
+    setEvaluateLoading(false);
   };
 
   if (!job) {
     return (
-      <div className="min-h-screen bg-zinc-50 dark:bg-black p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center py-12">
-            <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-4">
-              Job not found.
-            </p>
-            <button
-              onClick={handleBackToJobs}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Back to Job Posts
-            </button>
-          </div>
+      <div className="min-h-screen bg-white dark:bg-zinc-950 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-zinc-500 dark:text-zinc-400 mb-4">Job not found.</p>
+          <button
+            onClick={() => (window.location.href = '/recruiter/job-posts')}
+            className="px-5 py-2.5 text-sm font-medium rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
+          >
+            Back to Job Posts
+          </button>
         </div>
       </div>
     );
   }
 
+  const unevaluatedCount = applications.filter(
+    (app) => app.artifact_data != null && app.evaluation_status !== 'completed'
+  ).length;
+
+  const filteredApplications =
+    statusFilter === 'all' ? applications : applications.filter((app) => app.status === statusFilter);
+
+  const evaluatedApps = filteredApplications.filter(
+    (app) => app.evaluation_data != null && app.evaluation_status === 'completed'
+  );
+  const pendingEvaluationApps = filteredApplications.filter(
+    (app) => app.artifact_data == null || app.evaluation_status !== 'completed'
+  );
+
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-black dark:text-zinc-50">
-            Applications for {job.title}
+    <div className="min-h-screen bg-white dark:bg-zinc-950 px-6 py-10">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-10">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            {job.title}
           </h1>
           <button
-            onClick={handleBackToJobs}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            onClick={() => (window.location.href = '/recruiter/job-posts')}
+            className="px-4 py-2 text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
           >
-            Back to Job Posts
+            Back to Jobs
           </button>
         </div>
 
-        {/* Job Details */}
-        <div className="bg-white dark:bg-black border border-black/[.08] dark:border-white/[.145] rounded-lg p-6 shadow-sm mb-8">
-          <h2 className="text-xl font-semibold text-black dark:text-zinc-50 mb-4">Job Details</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Job summary */}
+        <div className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-5 mb-8">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-y-2 gap-x-6 text-sm">
             <div>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                <strong>Company:</strong> {job.company}
-              </p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                <strong>Location:</strong> {job.location}
-              </p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                <strong>Type:</strong> {job.type}
-              </p>
+              <span className="text-zinc-400 dark:text-zinc-500">Company</span>
+              <p className="text-zinc-700 dark:text-zinc-300">{job.company}</p>
             </div>
             <div>
-              {job.salary && (
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                  <strong>Salary:</strong> {job.salary}
-                </p>
-              )}
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                <strong>Posted:</strong> {new Date(job.created_at).toLocaleDateString()}
-              </p>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                <strong>Total Applications:</strong> {applications.length}
-              </p>
+              <span className="text-zinc-400 dark:text-zinc-500">Location</span>
+              <p className="text-zinc-700 dark:text-zinc-300">{job.location}</p>
+            </div>
+            <div>
+              <span className="text-zinc-400 dark:text-zinc-500">Type</span>
+              <p className="text-zinc-700 dark:text-zinc-300 capitalize">{job.type}</p>
+            </div>
+            {job.salary && (
+              <div>
+                <span className="text-zinc-400 dark:text-zinc-500">Salary</span>
+                <p className="text-zinc-700 dark:text-zinc-300">{job.salary}</p>
+              </div>
+            )}
+            <div>
+              <span className="text-zinc-400 dark:text-zinc-500">Posted</span>
+              <p className="text-zinc-700 dark:text-zinc-300">{new Date(job.created_at).toLocaleDateString()}</p>
+            </div>
+            <div>
+              <span className="text-zinc-400 dark:text-zinc-500">Applications</span>
+              <p className="text-zinc-700 dark:text-zinc-300">{applications.length}</p>
             </div>
           </div>
         </div>
 
-        {/* Applications */}
         {applications.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-4">
-              No applications received yet.
-            </p>
-            <p className="text-zinc-500 dark:text-zinc-500">
-              Applications will appear here once candidates start applying.
-            </p>
+          <div className="text-center py-20">
+            <p className="text-zinc-500 dark:text-zinc-400">No applications received yet.</p>
           </div>
         ) : (
           <div className="space-y-6">
-            <h2 className="text-2xl font-semibold text-black dark:text-zinc-50 mb-4">
-              Candidate Applications ({applications.length})
-            </h2>
-            
-            {/* Group applications by status */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Pending Applications */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-yellow-600 dark:text-yellow-400 border-b border-yellow-200 dark:border-yellow-800 pb-2">
-                  Pending ({applications.filter(app => app.status === 'pending').length})
-                </h3>
-                {applications.filter(app => app.status === 'pending').map((application, index) => (
-                  <ApplicationCard 
-                    key={application.id} 
-                    application={application} 
-                    index={index} 
-                    onUpdateStatus={handleUpdateApplicationStatus}
-                  />
-                ))}
-                {applications.filter(app => app.status === 'pending').length === 0 && (
-                  <p className="text-zinc-500 dark:text-zinc-400 text-sm">No pending applications</p>
-                )}
-              </div>
-
-              {/* Accepted Applications */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-green-600 dark:text-green-400 border-b border-green-200 dark:border-green-800 pb-2">
-                  Accepted ({applications.filter(app => app.status === 'accepted').length})
-                </h3>
-                {applications.filter(app => app.status === 'accepted').map((application, index) => (
-                  <ApplicationCard 
-                    key={application.id} 
-                    application={application} 
-                    index={index} 
-                    onUpdateStatus={handleUpdateApplicationStatus}
-                  />
-                ))}
-                {applications.filter(app => app.status === 'accepted').length === 0 && (
-                  <p className="text-zinc-500 dark:text-zinc-400 text-sm">No accepted applications</p>
-                )}
-              </div>
-
-              {/* Rejected Applications */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-red-600 dark:text-red-400 border-b border-red-200 dark:border-red-800 pb-2">
-                  Rejected ({applications.filter(app => app.status === 'rejected').length})
-                </h3>
-                {applications.filter(app => app.status === 'rejected').map((application, index) => (
-                  <ApplicationCard 
-                    key={application.id} 
-                    application={application} 
-                    index={index} 
-                    onUpdateStatus={handleUpdateApplicationStatus}
-                  />
-                ))}
-                {applications.filter(app => app.status === 'rejected').length === 0 && (
-                  <p className="text-zinc-500 dark:text-zinc-400 text-sm">No rejected applications</p>
-                )}
-              </div>
+            {/* Controls */}
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">
+                Leaderboard
+                <span className="text-sm font-normal text-zinc-400 dark:text-zinc-500 ml-2">
+                  ({applications.length})
+                </span>
+              </h2>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                className="px-3 py-1.5 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-950 text-zinc-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-zinc-400 dark:focus:ring-zinc-600"
+              >
+                <option value="all">All statuses</option>
+                <option value="pending">Pending</option>
+                <option value="accepted">Accepted</option>
+                <option value="rejected">Rejected</option>
+              </select>
+              {unevaluatedCount > 0 && (
+                <button
+                  onClick={handleEvaluateAll}
+                  disabled={evaluateLoading}
+                  className="px-4 py-1.5 text-xs font-medium rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {evaluateLoading ? 'Evaluating...' : `Evaluate All (${unevaluatedCount})`}
+                </button>
+              )}
             </div>
+
+            {/* Evaluated */}
+            {evaluatedApps.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-zinc-500 dark:text-zinc-400 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                  Evaluated (by score)
+                </h3>
+                <div className="space-y-3">
+                  {evaluatedApps.map((application, index) => (
+                    <ApplicationCard
+                      key={application.id}
+                      application={application}
+                      index={index}
+                      job={job}
+                      onUpdateStatus={handleUpdateApplicationStatus}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Pending evaluation */}
+            {pendingEvaluationApps.length > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-medium text-zinc-400 dark:text-zinc-500 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+                  Pending Evaluation ({pendingEvaluationApps.length})
+                </h3>
+                <div className="space-y-3">
+                  {pendingEvaluationApps.map((application, index) => (
+                    <ApplicationCard
+                      key={application.id}
+                      application={application}
+                      index={evaluatedApps.length + index}
+                      job={job}
+                      onUpdateStatus={handleUpdateApplicationStatus}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

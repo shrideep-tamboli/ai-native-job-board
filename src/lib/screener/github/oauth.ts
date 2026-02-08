@@ -9,8 +9,13 @@ const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 
 /**
  * Build the GitHub OAuth authorization URL.
+ * @param scopes  GitHub OAuth scopes to request.
+ * @param returnTo  Optional path to redirect back to after the callback (e.g. '/candidate/feed').
  */
-export function getGitHubAuthURL(scopes: string[] = ['repo', 'read:user']): string {
+export function getGitHubAuthURL(
+  scopes: string[] = ['repo', 'read:user'],
+  returnTo?: string,
+): string {
   const clientId = process.env.GITHUB_CLIENT_ID;
   if (!clientId) {
     throw new ScreenerError(
@@ -22,14 +27,31 @@ export function getGitHubAuthURL(scopes: string[] = ['repo', 'read:user']): stri
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
   const callbackUrl = `${appUrl}/api/auth/github/callback`;
 
+  // Encode returnTo inside the state parameter alongside the CSRF token
+  const csrf = generateState();
+  const statePayload = returnTo ? `${csrf}:${returnTo}` : csrf;
+
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: callbackUrl,
     scope: scopes.join(' '),
-    state: generateState(),
+    state: statePayload,
   });
 
   return `${GITHUB_AUTHORIZE_URL}?${params.toString()}`;
+}
+
+/**
+ * Extract the returnTo path from the state parameter, if present.
+ */
+export function parseReturnToFromState(state: string | null): string | null {
+  if (!state) return null;
+  const colonIndex = state.indexOf(':');
+  if (colonIndex === -1) return null;
+  const path = state.substring(colonIndex + 1);
+  // Only allow relative paths starting with /
+  if (path.startsWith('/')) return path;
+  return null;
 }
 
 /**

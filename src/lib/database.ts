@@ -23,6 +23,11 @@ export interface Application {
   status: 'pending' | 'accepted' | 'rejected'
   applied_at: string
   updated_at: string
+  repo_url?: string | null
+  artifact_data?: Record<string, unknown> | null
+  evaluation_data?: Record<string, unknown> | null
+  overall_score?: number | null
+  evaluation_status?: 'pending' | 'processing' | 'completed' | 'failed' | null
 }
 
 export interface UserProfile {
@@ -140,13 +145,57 @@ export const jobService = {
 // Application operations
 export const applicationService = {
   // Create a new application
-  async createApplication(application: Omit<Application, 'id' | 'applied_at' | 'updated_at'>) {
+  async createApplication(application: Omit<Application, 'id' | 'applied_at' | 'updated_at' | 'candidate_id'>) {
     const { data, error } = await supabase
       .from('applications')
       .insert({
-        ...application,
-        candidate_id: (await supabase.auth.getUser()).data?.user?.id
+        job_id: application.job_id,
+        candidate_message: application.candidate_message,
+        status: application.status ?? 'pending',
+        candidate_id: (await supabase.auth.getUser()).data?.user?.id,
+        ...(application.repo_url != null && { repo_url: application.repo_url }),
+        ...(application.artifact_data != null && { artifact_data: application.artifact_data }),
       })
+      .select()
+      .single()
+
+    // #region agent log
+    if (error) {
+      fetch('http://127.0.0.1:7245/ingest/d9416256-93db-4597-bb06-cd9a2ae75bef',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'database.ts:createApplication',message:'supabase error',data:{message:error.message,code:error.code,details:error.details},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      throw error;
+    }
+    // #endregion
+    return data
+  },
+
+  // Get applications for a specific job (ordered by overall_score desc for leaderboard)
+  async getApplicationsByJobId(jobId: string) {
+    const { data, error } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('job_id', jobId)
+      .order('overall_score', { ascending: false, nullsFirst: false })
+      .order('applied_at', { ascending: false })
+
+    if (error) throw error
+    return data || []
+  },
+
+  // Update application with evaluation result (recruiter dashboard)
+  async updateApplicationEvaluation(
+    applicationId: string,
+    evaluationData: Record<string, unknown>,
+    overallScore: number
+  ) {
+    const { data, error } = await supabase
+      .from('applications')
+      .update({
+        evaluation_data: evaluationData,
+        overall_score: overallScore,
+        evaluation_status: 'completed',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', applicationId)
       .select()
       .single()
 
@@ -154,25 +203,14 @@ export const applicationService = {
     return data
   },
 
-  // Get applications for a specific job
-  async getApplicationsByJobId(jobId: string) {
-    console.log('Querying applications for jobId:', jobId);
-    
-    // First try a simple query without the join
-    const { data, error } = await supabase
+  // Set evaluation status to processing (before calling evaluate API)
+  async setApplicationEvaluationProcessing(applicationId: string) {
+    const { error } = await supabase
       .from('applications')
-      .select('*')
-      .eq('job_id', jobId)
-      .order('applied_at', { ascending: false })
+      .update({ evaluation_status: 'processing', updated_at: new Date().toISOString() })
+      .eq('id', applicationId)
 
-    console.log('Query result:', { data, error });
-    console.log('Applications found:', data?.length || 0);
-
-    if (error) {
-      console.error('Database error:', error);
-      throw error
-    }
-    return data || []
+    if (error) throw error
   },
 
   // Get applications submitted by current user

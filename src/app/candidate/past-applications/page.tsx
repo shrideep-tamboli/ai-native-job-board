@@ -13,18 +13,14 @@ export default function PastApplicationsPage() {
 
   const loadApplications = async () => {
     try {
-      // Load user's applications from database
       const userApplications = await applicationService.getMyApplications();
       setApplications(userApplications);
-      
-      // Load job details for each application
-      const jobIds = userApplications.map(app => app.job_id);
+
+      const jobIds = userApplications.map((app) => app.job_id);
       const uniqueJobIds = [...new Set(jobIds)];
-      
       const jobDetails = await Promise.all(
-        uniqueJobIds.map(jobId => jobService.getJobById(jobId))
+        uniqueJobIds.map((jobId) => jobService.getJobById(jobId))
       );
-      
       setJobs(jobDetails.filter(Boolean));
     } catch (error) {
       console.error('Error loading applications:', error);
@@ -34,113 +30,95 @@ export default function PastApplicationsPage() {
   const handleWithdrawApplication = async (applicationId: string) => {
     try {
       await applicationService.deleteApplication(applicationId);
-      // Refresh applications list
       await loadApplications();
-      alert('Application withdrawn successfully!');
     } catch (error) {
       console.error('Error withdrawing application:', error);
-      alert('Error withdrawing application. Please try again.');
     }
   };
 
-  const getJobDetails = (jobId: string) => {
-    return jobs.find(job => job.id === jobId);
+  const getJobDetails = (jobId: string) => jobs.find((job) => job.id === jobId);
+
+  const statusStyle = (status: string) => {
+    if (status === 'accepted') return 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900';
+    if (status === 'rejected') return 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400';
+    return 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400';
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-black p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-black dark:text-zinc-50">My Applications</h1>
+    <div className="min-h-screen bg-white dark:bg-zinc-950 px-6 py-10">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-10">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+            My Applications
+          </h1>
           <button
-            onClick={() => window.location.href = '/'}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            onClick={() => (window.location.href = '/')}
+            className="px-4 py-2 text-sm border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-900 transition-colors"
           >
             Back to Jobs
           </button>
         </div>
-        
+
         {applications.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-lg text-zinc-600 dark:text-zinc-400 mb-4">
-              You haven't applied to any jobs yet.
-            </p>
+          <div className="text-center py-20">
+            <p className="text-zinc-500 dark:text-zinc-400 mb-4">You haven&apos;t applied to any jobs yet.</p>
             <button
-              onClick={() => window.location.href = '/'}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={() => (window.location.href = '/')}
+              className="px-5 py-2.5 text-sm font-medium rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
             >
-              Browse Available Jobs
+              Browse Jobs
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {applications.map((application) => {
               const job = getJobDetails(application.job_id);
               if (!job) return null;
-              
+
               return (
                 <div
                   key={application.id}
-                  className="bg-white dark:bg-black border border-black/[.08] dark:border-white/[.145] rounded-lg p-6 shadow-sm"
+                  className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-6 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
                 >
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
-                      <h2 className="text-xl font-semibold text-black dark:text-zinc-50 mb-2">
+                      <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-2">
                         {job.title}
                       </h2>
-                      <div className="flex flex-wrap gap-4 text-sm text-zinc-600 dark:text-zinc-400 mb-3">
-                        <span className="flex items-center">
-                          <strong>Company:</strong> {job.company}
-                        </span>
-                        <span className="flex items-center">
-                          <strong>Location:</strong> {job.location}
-                        </span>
-                        <span className="flex items-center">
-                          <strong>Type:</strong> {job.type}
-                        </span>
-                        {job.salary && (
-                          <span className="flex items-center">
-                            <strong>Salary:</strong> {job.salary}
-                          </span>
-                        )}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
+                        <span>{job.company}</span>
+                        <span>{job.location}</span>
+                        <span className="capitalize">{job.type}</span>
+                        {job.salary && <span>{job.salary}</span>}
                       </div>
-                      <div className="flex gap-4 text-sm text-zinc-500 dark:text-zinc-500 mb-4">
-                        <span>
-                          <strong>Applied on:</strong> {new Date(application.applied_at).toLocaleDateString()}
+                      <div className="flex items-center gap-3 mt-3">
+                        <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                          Applied {new Date(application.applied_at).toLocaleDateString()}
                         </span>
-                        <span>
-                          <strong>Status:</strong> 
-                          <span className={`ml-1 px-2 py-1 rounded text-xs font-medium ${
-                            application.status === 'pending' 
-                              ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
-                              : application.status === 'accepted'
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                          }`}>
-                            {application.status}
-                          </span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${statusStyle(application.status)}`}>
+                          {application.status}
                         </span>
                       </div>
                     </div>
                     <button
                       onClick={() => handleWithdrawApplication(application.id)}
-                      className="ml-4 px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                      className="ml-4 px-3 py-1.5 text-xs border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-colors"
                     >
                       Withdraw
                     </button>
                   </div>
-                  
-                  <div className="space-y-4">
+
+                  <div className="space-y-3">
                     <div>
-                      <h3 className="font-medium text-black dark:text-zinc-50 mb-2">Job Description</h3>
-                      <p className="text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">
+                      <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Description</h3>
+                      <p className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap leading-relaxed">
                         {job.description}
                       </p>
                     </div>
-                    
                     <div>
-                      <h3 className="font-medium text-black dark:text-zinc-50 mb-2">Requirements</h3>
-                      <p className="text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap">
+                      <h3 className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1">Requirements</h3>
+                      <p className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap leading-relaxed">
                         {job.requirements}
                       </p>
                     </div>

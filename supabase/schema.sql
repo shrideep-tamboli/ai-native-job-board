@@ -28,7 +28,12 @@ CREATE TABLE IF NOT EXISTS applications (
   status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
   applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(job_id, candidate_id) -- Prevent duplicate applications
+  UNIQUE(job_id, candidate_id), -- Prevent duplicate applications
+  repo_url TEXT,
+  artifact_data JSONB,
+  evaluation_data JSONB,
+  overall_score INTEGER CHECK (overall_score >= 0 AND overall_score <= 100),
+  evaluation_status TEXT DEFAULT 'pending' CHECK (evaluation_status IN ('pending', 'processing', 'completed', 'failed'))
 );
 
 -- User profiles table for additional user information
@@ -49,6 +54,7 @@ CREATE INDEX IF NOT EXISTS idx_applications_job_id ON applications(job_id);
 CREATE INDEX IF NOT EXISTS idx_applications_candidate_id ON applications(candidate_id);
 CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
 CREATE INDEX IF NOT EXISTS idx_applications_applied_at ON applications(applied_at DESC);
+CREATE INDEX IF NOT EXISTS idx_applications_overall_score ON applications(job_id, overall_score DESC NULLS LAST);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
@@ -147,3 +153,12 @@ CREATE TRIGGER update_applications_updated_at
 CREATE TRIGGER update_user_profiles_updated_at 
   BEFORE UPDATE ON user_profiles 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Migration: add screener columns to applications (run if table already existed without them)
+-- If you see PGRST204 "Could not find the 'artifact_data' column", run this block in Supabase Dashboard > SQL Editor:
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS repo_url TEXT;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS artifact_data JSONB;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS evaluation_data JSONB;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS overall_score INTEGER;
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS evaluation_status TEXT DEFAULT 'pending';
+CREATE INDEX IF NOT EXISTS idx_applications_overall_score ON applications(job_id, overall_score DESC NULLS LAST);

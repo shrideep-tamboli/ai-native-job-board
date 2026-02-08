@@ -1,15 +1,18 @@
 // ============================================================
 // GET /api/auth/github
 // Redirects the user to GitHub's OAuth authorization page.
+// Accepts an optional ?returnTo=/path query param so the
+// callback can redirect back to the originating page.
 // ============================================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getGitHubAuthURL } from '@/lib/screener/github/oauth';
 import { ScreenerError } from '@/lib/screener/types';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const authUrl = getGitHubAuthURL(['repo', 'read:user']);
+    const returnTo = new URL(request.url).searchParams.get('returnTo') ?? undefined;
+    const authUrl = getGitHubAuthURL(['repo', 'read:user'], returnTo);
     return NextResponse.redirect(authUrl);
   } catch (error) {
     if (error instanceof ScreenerError) {
